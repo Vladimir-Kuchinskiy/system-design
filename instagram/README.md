@@ -61,151 +61,63 @@
 
 ## Step 3: Design core components
 
-### Use case: User enters a block of text and gets a randomly generated link
+### Use case: User views timeline
 
-We could use a [relational database](https://github.com/donnemartin/system-design-primer#relational-database-management-system-rdbms) as a large hash table, mapping the generated url to a file server and path containing the paste file.
-
-Instead of managing a file server, we could use a managed **Object Store** such as Amazon S3 or a [NoSQL document store](https://github.com/donnemartin/system-design-primer#document-store).
-
-An alternative to a relational database acting as a large hash table, we could use a [NoSQL key-value store](https://github.com/donnemartin/system-design-primer#key-value-store).  We should discuss the [tradeoffs between choosing SQL or NoSQL](https://github.com/donnemartin/system-design-primer#sql-or-nosql).  The following discussion uses the relational database approach.
-
-* The **Client** sends a create paste request to the **Web Server**, running as a [reverse proxy](https://github.com/donnemartin/system-design-primer#reverse-proxy-web-server)
-* The **Web Server** forwards the request to the **Write API** server
-* The **Write API** server does the following:
-    * Generates a unique url
-        * Checks if the url is unique by looking at the **SQL Database** for a duplicate
-        * If the url is not unique, it generates another url
-        * If we supported a custom url, we could use the user-supplied (also check for a duplicate)
-    * Saves to the **SQL Database** `pastes` table
-    * Saves the paste data to the **Object Store**
-    * Returns the url
-
-**Clarify with your interviewer how much code you are expected to write**.
-
-The `pastes` table could have the following structure:
+The `Posts` table could have the following structure:
 
 ```
-shortlink char(7) NOT NULL
-expiration_length_in_minutes int NOT NULL
+id uint64 NOT NULL serial
+user_id uint64 NOT NULL
+description varchar(1024) DEFAULT NULL
 created_at datetime NOT NULL
-paste_path varchar(255) NOT NULL
-PRIMARY KEY(shortlink)
+updated_at datetime
+PRIMARY KEY(id)
 ```
+To be able to query user posts by user we need a B-tree index on (user_id) column
 
-Setting the primary key to be based on the `shortlink` column creates an [index](https://github.com/donnemartin/system-design-primer#use-good-indices) that the database uses to enforce uniqueness. We'll create an additional index on `created_at` to speed up lookups (log-time instead of scanning the entire table) and to keep the data in memory.  Reading 1 MB sequentially from memory takes about 250 microseconds, while reading from SSD takes 4x and from disk takes 80x longer.<sup><a href=https://github.com/donnemartin/system-design-primer#latency-numbers-every-programmer-should-know>1</a></sup>
-
-To generate the unique url, we could:
-
-* Take the [**MD5**](https://en.wikipedia.org/wiki/MD5) hash of the user's ip_address + timestamp
-    * MD5 is a widely used hashing function that produces a 128-bit hash value
-    * MD5 is uniformly distributed
-    * Alternatively, we could also take the MD5 hash of randomly-generated data
-* [**Base 62**](https://www.kerstner.at/2012/07/shortening-strings-using-base-62-encoding/) encode the MD5 hash
-    * Base 62 encodes to `[a-zA-Z0-9]` which works well for urls, eliminating the need for escaping special characters
-    * There is only one hash result for the original input and Base 62 is deterministic (no randomness involved)
-    * Base 64 is another popular encoding but provides issues for urls because of the additional `+` and `/` characters
-    * The following [Base 62 pseudocode](http://stackoverflow.com/questions/742013/how-to-code-a-url-shortener) runs in O(k) time where k is the number of digits = 7:
-
-```python
-def base_encode(num, base=62):
-    digits = []
-    while num > 0
-      remainder = modulo(num, base)
-      digits.push(remainder)
-      num = divide(num, base)
-    digits = digits.reverse
-```
-
-* Take the first 7 characters of the output, which results in 62^7 possible values and should be sufficient to handle our constraint of 360 million shortlinks in 3 years:
-
-```python
-url = base_encode(md5(ip_address+timestamp))[:URL_LENGTH]
-```
-
-We'll use a public [**REST API**](https://github.com/donnemartin/system-design-primer#representational-state-transfer-rest):
+The `Comments` table could have the following structure:
 
 ```
-$ curl -X POST --data '{ "expiration_length_in_minutes": "60", \
-    "paste_contents": "Hello World!" }' https://pastebin.com/api/v1/paste
+id uint64 NOT NULL serial
+post_id uint64 NOT NULL
+user_id uint64 NOT NULL
+comment varchar(1024) NOT NULL
+created_at datetime NOT NULL
+updated_at datetime
+PRIMARY KEY(id)
 ```
+To be able to query comments by post we need a B-tree index on (post_id) column
+To be able to sort posts by created_at we need a B-tree index on (created_at) column
 
-Response:
-
-```
-{
-    "shortlink": "foobar"
-}
-```
-
-For internal communications, we could use [Remote Procedure Calls](https://github.com/donnemartin/system-design-primer#remote-procedure-call-rpc).
-
-### Use case: User enters a paste's url and views the contents
-
-* The **Client** sends a get paste request to the **Web Server**
-* The **Web Server** forwards the request to the **Read API** server
-* The **Read API** server does the following:
-    * Checks the **SQL Database** for the generated url
-        * If the url is in the **SQL Database**, fetch the paste contents from the **Object Store**
-        * Else, return an error message for the user
-
-REST API:
+The `Likes` table could have the following structure:
 
 ```
-$ curl https://pastebin.com/api/v1/paste?shortlink=foobar
+user_id uint64 NOT NULL
+post_id uint64 NOT NULL
+created_at datetime NOT NULL
+PRIMARY KEY(user_id,post_id)
+```
+To be able to query likes by post we need a B-tree index on (post_id) column
+
+The `Follows` table could have the following structure:
+
+```
+followee_id uint64 NOT NULL
+follower_id uint64 NOT NULL
+created_at datetime NOT NULL
+PRIMARY KEY(follower_id,follower_id)
 ```
 
-Response:
+To be able to query followees of a user we need a B-tree index on (follower_id) column
+To be able to query followers of a user we need a B-tree index on (followee_id) column
 
-```
-{
-    "paste_contents": "Hello World"
-    "created_at": "YYYY-MM-DD HH:MM:SS"
-    "expiration_length_in_minutes": "60"
-}
-```
-
-### Use case: Service tracks analytics of pages
-
-Since realtime analytics are not a requirement, we could simply **MapReduce** the **Web Server** logs to generate hit counts.
-
-**Clarify with your interviewer how much code you are expected to write**.
-
-```python
-class HitCounts(MRJob):
-
-    def extract_url(self, line):
-        """Extract the generated url from the log line."""
-        ...
-
-    def extract_year_month(self, line):
-        """Return the year and month portions of the timestamp."""
-        ...
-
-    def mapper(self, _, line):
-        """Parse each log line, extract and transform relevant lines.
-
-        Emit key value pairs of the form:
-
-        (2016-01, url0), 1
-        (2016-01, url0), 1
-        (2016-01, url1), 1
-        """
-        url = self.extract_url(line)
-        period = self.extract_year_month(line)
-        yield (period, url), 1
-
-    def reducer(self, key, values):
-        """Sum values for each key.
-
-        (2016-01, url0), 2
-        (2016-01, url1), 1
-        """
-        yield key, sum(values)
-```
-
-### Use case: Service deletes expired pastes
-
-To delete expired pastes, we could just scan the **SQL Database** for all entries whose expiration timestamp are older than the current timestamp.  All expired entries would then be deleted (or  marked as expired) from the table.
+To be able to generate a timeline we need to do next steps:
+Current user id = 111;
+1) Followees => `SELECT * FROM follows WHERE follower_id = 111`
+2) Query user profiles for Users with appropriate data.
+3) Followees resent Posts => `SELECT * FROM posts WHERE user_id in (followees_ids) ORDER BY created_at DESC LIMIT 20`
+4) Posts likes => `SELECT post_id, count(*) FROM likes WHERE post_id in (followees_posts_ids)`
+6) Aggregate result
 
 ## Step 4: Scale the design
 
