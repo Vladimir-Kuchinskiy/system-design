@@ -57,7 +57,7 @@
 
 > Outline a high level design with all important components.
 
-![Imgur](instagram/Basic-Design.png)
+![Imgur](Basic-Design.png)
 
 ## Step 3: Design core components
 
