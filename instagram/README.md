@@ -139,6 +139,6 @@ The solution was to start using cache, and there were couple of caching strategi
 
 The second caching option was selected because of 2 reasons:
 1) High Availability requirements, so the **Timeline Service** should always return some data, event if it is outdated.
-2) Evential Consistency is a good enought option, so again updating timeline in a near real time speed I good enough solution.
+2) Evential Consistency is a good enought option, so again updating timeline in a near real time speed is a good enough solution.
 
 Because **Timeline Service** always will be reading in memory stored data, the read should fit our requirements of ~400 reads per second.
