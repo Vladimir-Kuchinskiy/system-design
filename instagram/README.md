@@ -11,11 +11,6 @@
 * **User** views a post and leave a **Comment**
 * **User** views the news feed and can see the timeline of posts of the users he/she follows
 
-* **Service** tracks analytics of pages
-    * Monthly visit stats
-* **Service** deletes expired pastes
-* **Service** has high availability
-
 #### Out of scope
 
 * **User** registers for an account
@@ -114,7 +109,7 @@ To be able to query followers of a user we need a B-tree index on (followee_id) 
 To be able to generate a timeline we need to do next steps:
 Current user id = 111;
 1) Followees => `SELECT * FROM follows WHERE follower_id = 111`
-2) Query user profiles for Users with appropriate data.
+2) Followees user profiles => `SELECT * FROM user_profile WHERE user_id in (followees_ids)`
 3) Followees resent Posts => `SELECT * FROM posts WHERE user_id in (followees_ids) ORDER BY created_at DESC LIMIT 20`
 4) Posts likes => `SELECT post_id, count(*) FROM likes WHERE post_id in (followees_posts_ids)`
 6) Aggregate result
@@ -123,7 +118,7 @@ Current user id = 111;
 
 > Identify and address bottlenecks, given the constraints.
 
-![Imgur](http://i.imgur.com/4edXG0T.png)
+![Imgur](Final-Design.png)
 
 **Important: Do not simply jump right into the final design from the initial design!**
 
