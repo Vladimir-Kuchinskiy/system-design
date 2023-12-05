@@ -136,8 +136,7 @@ The solution is to introduce the CDN that will be caching static content like We
 The solution was to start using cache, and there were couple of caching strategies that we could select:
 * **Cache Aside** - in this case we would prepare timeline for each new request by goting to all the services and aggregating the info, and store it in the cache, so the next time request comes we are able to return responce from the cache.
 * **Refresh-ahead** - in this case we would precompute the cache reactively on a data change on side, so the **Timeline Service** just need to go to read from the cache.
-
-The second option was selected because of 2 reasons:
+The second caching option was selected because of 2 reasons:
 1) High Availability requirements, so the **Timeline Service** should always return some data, event if it is outdated.
 2) Evential Consistency is a good enought option, so again updating timeline in a near real time speed I good enough solution.
 
