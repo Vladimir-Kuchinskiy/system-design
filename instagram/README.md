@@ -120,96 +120,25 @@ Current user id = 111;
 
 ![Imgur](Final-Design.png)
 
-**Important: Do not simply jump right into the final design from the initial design!**
+### SPOFs
 
-State you would do this iteratively: 1) **Benchmark/Load Test**, 2) **Profile** for bottlenecks 3) address bottlenecks while evaluating alternatives and trade-offs, and 4) repeat.  See [Design a system that scales to millions of users on AWS](../scaling_aws/README.md) as a sample on how to iteratively scale the initial design.
+Basic design had lots of SPOFs, all the services and all the databases had a single point of failure.
+The solutions were:
+1) Introduce a set of **Load Balancers** at the front of a services infrastructure.
+2) Scale all **API** services to minimum 2 replicas
+3) Scale **Databases** to Multi-AZ setup with a single side replica for recovery.
 
-It's important to discuss what bottlenecks you might encounter with the initial design and how you might address each of them.  For example, what issues are addressed by adding a **Load Balancer** with multiple **Web Servers**?  **CDN**?  **Master-Slave Replicas**?  What are the alternatives and **Trade-Offs** for each?
+### Bottlenecks
 
-We'll introduce some components to complete the design and to address scalability issues.  Internal load balancers are not shown to reduce clutter.
+1) **Blob Store** was a bottleneck in terms of performance, it was affecting the quickness of the Timeline rendering.
+The solution is to introduce the CDN that will be caching static content like WebPages, Photos and Videos.
+2) **Timeline Service** was a bottleneck because it was querying all the services to Prepare a timeline on each request which were increasing the averall system load and since we will have ~ 400 read requests per sec on average it is not the setup we need.
+The solution was to start using cache, and there were couple of caching strategies that we could select:
+* **Cache Aside** - in this case we would prepare timeline for each new request by goting to all the services and aggregating the info, and store it in the cache, so the next time request comes we are able to return responce from the cache.
+* **Refresh-ahead** - in this case we would precompute the cache reactively on a data change on side, so the **Timeline Service** just need to go to read from the cache.
 
-*To avoid repeating discussions*, refer to the following [system design topics](https://github.com/donnemartin/system-design-primer#index-of-system-design-topics) for main talking points, tradeoffs, and alternatives:
+The second option was selected because of 2 reasons:
+1) High Availability requirements, so the **Timeline Service** should always return some data, event if it is outdated.
+2) Evential Consistency is a good enought option, so again updating timeline in a near real time speed I good enough solution.
 
-* [DNS](https://github.com/donnemartin/system-design-primer#domain-name-system)
-* [CDN](https://github.com/donnemartin/system-design-primer#content-delivery-network)
-* [Load balancer](https://github.com/donnemartin/system-design-primer#load-balancer)
-* [Horizontal scaling](https://github.com/donnemartin/system-design-primer#horizontal-scaling)
-* [Web server (reverse proxy)](https://github.com/donnemartin/system-design-primer#reverse-proxy-web-server)
-* [API server (application layer)](https://github.com/donnemartin/system-design-primer#application-layer)
-* [Cache](https://github.com/donnemartin/system-design-primer#cache)
-* [Relational database management system (RDBMS)](https://github.com/donnemartin/system-design-primer#relational-database-management-system-rdbms)
-* [SQL write master-slave failover](https://github.com/donnemartin/system-design-primer#fail-over)
-* [Master-slave replication](https://github.com/donnemartin/system-design-primer#master-slave-replication)
-* [Consistency patterns](https://github.com/donnemartin/system-design-primer#consistency-patterns)
-* [Availability patterns](https://github.com/donnemartin/system-design-primer#availability-patterns)
-
-The **Analytics Database** could use a data warehousing solution such as Amazon Redshift or Google BigQuery.
-
-An **Object Store** such as Amazon S3 can comfortably handle the constraint of 12.7 GB of new content per month.
-
-To address the 40 *average* read requests per second (higher at peak), traffic for popular content should be handled by the **Memory Cache** instead of the database.  The **Memory Cache** is also useful for handling the unevenly distributed traffic and traffic spikes.  The **SQL Read Replicas** should be able to handle the cache misses, as long as the replicas are not bogged down with replicating writes.
-
-4 *average* paste writes per second (with higher at peak) should be do-able for a single **SQL Write Master-Slave**.  Otherwise, we'll need to employ additional SQL scaling patterns:
-
-* [Federation](https://github.com/donnemartin/system-design-primer#federation)
-* [Sharding](https://github.com/donnemartin/system-design-primer#sharding)
-* [Denormalization](https://github.com/donnemartin/system-design-primer#denormalization)
-* [SQL Tuning](https://github.com/donnemartin/system-design-primer#sql-tuning)
-
-We should also consider moving some data to a **NoSQL Database**.
-
-## Additional talking points
-
-> Additional topics to dive into, depending on the problem scope and time remaining.
-
-#### NoSQL
-
-* [Key-value store](https://github.com/donnemartin/system-design-primer#key-value-store)
-* [Document store](https://github.com/donnemartin/system-design-primer#document-store)
-* [Wide column store](https://github.com/donnemartin/system-design-primer#wide-column-store)
-* [Graph database](https://github.com/donnemartin/system-design-primer#graph-database)
-* [SQL vs NoSQL](https://github.com/donnemartin/system-design-primer#sql-or-nosql)
-
-### Caching
-
-* Where to cache
-    * [Client caching](https://github.com/donnemartin/system-design-primer#client-caching)
-    * [CDN caching](https://github.com/donnemartin/system-design-primer#cdn-caching)
-    * [Web server caching](https://github.com/donnemartin/system-design-primer#web-server-caching)
-    * [Database caching](https://github.com/donnemartin/system-design-primer#database-caching)
-    * [Application caching](https://github.com/donnemartin/system-design-primer#application-caching)
-* What to cache
-    * [Caching at the database query level](https://github.com/donnemartin/system-design-primer#caching-at-the-database-query-level)
-    * [Caching at the object level](https://github.com/donnemartin/system-design-primer#caching-at-the-object-level)
-* When to update the cache
-    * [Cache-aside](https://github.com/donnemartin/system-design-primer#cache-aside)
-    * [Write-through](https://github.com/donnemartin/system-design-primer#write-through)
-    * [Write-behind (write-back)](https://github.com/donnemartin/system-design-primer#write-behind-write-back)
-    * [Refresh ahead](https://github.com/donnemartin/system-design-primer#refresh-ahead)
-
-### Asynchronism and microservices
-
-* [Message queues](https://github.com/donnemartin/system-design-primer#message-queues)
-* [Task queues](https://github.com/donnemartin/system-design-primer#task-queues)
-* [Back pressure](https://github.com/donnemartin/system-design-primer#back-pressure)
-* [Microservices](https://github.com/donnemartin/system-design-primer#microservices)
-
-### Communications
-
-* Discuss tradeoffs:
-    * External communication with clients - [HTTP APIs following REST](https://github.com/donnemartin/system-design-primer#representational-state-transfer-rest)
-    * Internal communications - [RPC](https://github.com/donnemartin/system-design-primer#remote-procedure-call-rpc)
-* [Service discovery](https://github.com/donnemartin/system-design-primer#service-discovery)
-
-### Security
-
-Refer to the [security section](https://github.com/donnemartin/system-design-primer#security).
-
-### Latency numbers
-
-See [Latency numbers every programmer should know](https://github.com/donnemartin/system-design-primer#latency-numbers-every-programmer-should-know).
-
-### Ongoing
-
-* Continue benchmarking and monitoring your system to address bottlenecks as they come up
-* Scaling is an iterative process
+Because **Timeline Service** always will be reading in memory stored data, the read should fit our requirements of ~400 reads per second.
