@@ -1,0 +1,22 @@
+version: '3'
+
+services:
+  mysql:
+    image: mysql:8.0.33
+    command: --innodb_flush_log_at_trx_commit=2
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+    healthcheck:
+      test: "/usr/bin/mysql --user=root --password=password --execute \"SHOW DATABASES;\""
+      interval: 2s
+      timeout: 20s
+      retries: 10
+    volumes:
+      - ./provision/mysql:/docker-entrypoint-initdb.d
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+volumes:
+  mysql-data:
+    driver: local
