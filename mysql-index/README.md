@@ -2,7 +2,7 @@
 
 ### 1) Without index
 
-![Explain-Without-Index.png](docs%2Fimages%2FExplain-Withou-Index.png)
+![Explain-Without-Index.png](docs%2Fimages%2FExplain-Without-Index.png)
 ![Select-Without-Index.png](docs%2Fimages%2FSelect-Without-Index.png)
 
 ### 2) With BTree Index
